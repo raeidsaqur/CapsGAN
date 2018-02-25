@@ -13,7 +13,7 @@ Coalesces Wassertein Distance algorithm based generative adversarial networks wi
 * TorchVision
 * TorchNet
 * TQDM
-* Visdom
+* Visdom [_optional_]
 
 ** For training, an NVIDIA TITAN XP GPU was used. __Using CUDA with GPU is strongly recommended__. CPU is supported but speed of training will be very slow.
 
@@ -28,15 +28,25 @@ Utilizes FAIR's visdom as visulization tool. If you'd like to visualize the test
 
 ```bash
 $ sudo python3 -m visdom.server &
-$ python3 main.py --visualize [True|False]
+$ python3 main.py --visualize [True|False] --cuda
 ```
 
 Else, simply run:
 
 ```bash
-$ python3 main.py --niter [NUM_EPOCHS] --
+$ python3 main.py --dataset cifar10 --dataroot ./data --cuda --niter [NUM_EPOCHS] --
+```
+
+To run with MLP as G or D, run:
+```bash
+$ python3 main.py --dataset cifar10 --dataroot ./data --cuda --experiment {Name} --mlp_G --ngf 512
 ```
 
 
 
 *** Note: __Improved ReadMe is in the works!__ 
+
+
+
+
+
