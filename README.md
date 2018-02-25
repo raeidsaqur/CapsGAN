@@ -42,7 +42,8 @@ To run with MLP as G or D, run:
 $ python3 main.py --dataset cifar10 --dataroot ./data --cuda --experiment {Name} --mlp_G --ngf 512
 ```
 
-
+## Contact
+Please send an email to raeidsaqur[at]cs[dot]toronto[dot]edu for questions, PRs etc.
 
 *** Note: __Improved ReadMe is in the works!__ 
 
