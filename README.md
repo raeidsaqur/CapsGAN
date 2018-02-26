@@ -28,7 +28,7 @@ Utilizes FAIR's visdom as visulization tool. If you'd like to visualize the test
 
 ```bash
 $ sudo python3 -m visdom.server &
-$ python3 main.py --visualize [True|False] --cuda
+$ python3 main.py --visualize --cuda
 ```
 
 Else, simply run:
