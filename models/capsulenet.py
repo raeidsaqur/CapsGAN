@@ -21,7 +21,11 @@ import torchnet as tnt
 import os, sys
 sys.setrecursionlimit(15000)
 
-import utils
+try:
+    import utils
+except ImportError as ie:
+    print("Couldn't import utils", file=sys.stderr)
+
 
 isDebug = True
 USE_CUDA = torch.cuda.is_available()
@@ -266,7 +270,8 @@ def main(opt):
     engine.hooks['on_start_epoch'] = on_start_epoch
     engine.hooks['on_end_epoch'] = on_end_epoch
 
-    engine.train(processor, get_iterator(True), maxepoch=NUM_EPOCHS, optimizer=optimizer)
+    # engine.train(processor, get_iterator(True), maxepoch=NUM_EPOCHS, optimizer=optimizer)
+    engine.train(processor, get_iterator(True), maxepoch=5, optimizer=optimizer)
 
 
 
