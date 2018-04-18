@@ -29,7 +29,7 @@ mnist = datasets.MNIST('./', train=True, transform=trans, download=download)
 
 batch_size = 64
 
-use_cuda = False
+use_cuda = True if torch.cuda.is_available() else False
 
 if __name__ == '__main__':
     #d_convs = [(32, 4, 2, 1), (64, 4, 2, 1), (1, 7, 1, 0)]
@@ -98,13 +98,15 @@ if __name__ == '__main__':
             #should we include the loss function of the data
             err_D = loss_d.data[0] + loss_g.data[0]
 
+
+            # TODO: D training much faster than G
             # training G
             optimizer_g.zero_grad()
             output = discriminator(fake)
             real_v = Variable(torch.Tensor(batch_size).fill_(real_label).float())
             if use_cuda:
                 real_v = real_v.cuda()
-
+            #Generator is essentially using discriminator loss, only with fake data for comparison.
             loss = discriminator.loss(x,output, real_v)
             loss.backward()
             optimizer_g.step()

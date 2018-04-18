@@ -7,7 +7,9 @@ from torch.autograd import Variable
 from torch.optim import Adam
 from torchvision import datasets, transforms
 import pdb
-USE_CUDA = False
+
+
+USE_CUDA = True if torch.cuda.is_available() else False
 
 
 class Mnist:
@@ -62,12 +64,13 @@ class PrimaryCaps(nn.Module):
         return output_tensor
 
 class DigitCaps(nn.Module):
-    def __init__(self, num_capsules=10, num_routes=32 * 6 * 6, in_channels=8, out_channels=16):
+    def __init__(self, num_capsules=10, num_routes=32 * 6 * 6, in_channels=8, out_channels=16, use_cuda=False):
         super(DigitCaps, self).__init__()
 
         self.in_channels = in_channels
         self.num_routes = num_routes
         self.num_capsules = num_capsules
+        self.use_cuda = use_cuda
 
         self.W = nn.Parameter(torch.randn(1, num_routes, num_capsules, out_channels, in_channels))
 
@@ -86,7 +89,8 @@ class DigitCaps(nn.Module):
         for iteration in range(num_iterations):
             c_ij = F.softmax(b_ij)
             c_ij = torch.cat([c_ij] * batch_size, dim=0).unsqueeze(4)
-
+            if USE_CUDA:
+                c_ij = c_ij.cuda()
             s_j = (c_ij * u_hat).sum(dim=1, keepdim=True)
             v_j = self.squash(s_j)
             
