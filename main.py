@@ -147,7 +147,8 @@ def __getDataSet(opt):
         opt.imageSize = 32
         dataset = dset.MNIST(root=opt.dataroot, download=True, transform=transforms.Compose([
                                    transforms.Scale(opt.imageSize),
-                                   transforms.ToTensor()
+                                   transforms.ToTensor(),
+                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
         # Update opt params for mnist
         if opt.load_dict:
