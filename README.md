@@ -39,8 +39,28 @@ $ python3 main.py --dataset cifar10 --dataroot ./data --cuda --niter [NUM_EPOCHS
 
 To run with MLP as G or D, run:
 ```bash
-$ python3 main.py --dataset cifar10 --dataroot ./data --cuda --experiment {Name} --mlp_G --ngf 512
+$ python3 main.py --dataset cifar10 --dataroot ./data --cuda {device_num} --experiment {Name} --mlp_G --ngf 512
 ```
+
+__Using CUDA__
+
+Pass in the gpu device number for e.g. `0`
+```
+$ python main.py --cuda {GPU_DEVICE_NUMBER}
+```
+
+__Enable Visualization__
+
+Start the server (probably in a screen or tmux):
+```bash
+python -m visdom.server -port 8097
+```
+
+Run with `--visualize` parameter
+```
+$ python main.py --cude {GPU_DEVICE_NUMBER} --visualize
+```
+
 
 ## Contact
 Please send an email to raeidsaqur[at]cs[dot]toronto[dot]edu for questions, PRs etc.
