@@ -116,6 +116,20 @@ def __getDataSet(opt):
     dataset = None
     if opt.dataset in ['imagenet', 'folder', 'lfw']:
         # folder dataset
+        traindir = os.path.join(opt.dataroot, f"{opt.dataroot}/train")
+        valdir = os.path.join(opt.dataroot, f"{opt.dataroot}/val")
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
+
+        train_dataset = dset.ImageFolder(
+            traindir,
+            transforms.Compose([
+                transforms.RandomResizedCrop(opt.imageSize),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ]))
+
         dataset = dset.ImageFolder(root=opt.dataroot,
                                    transform=transforms.Compose([
                                        transforms.Scale(opt.imageSize),
