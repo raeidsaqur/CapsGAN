@@ -69,7 +69,7 @@ Run with `--visualize` parameter
 $ python main.py --cude {GPU_DEVICE_NUMBER} --visualize
 ```
 
-##Architecture
+## Architecture
 
 Using DCGAN (and variants - BN, no-BN) as baseline against the CapsNet architecture. 
 
