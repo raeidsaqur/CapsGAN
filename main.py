@@ -3,7 +3,7 @@
 
 from __future__ import print_function
 import argparse
-import os, random
+import os, sys, random
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -25,6 +25,12 @@ USE_CUDA = torch.cuda.is_available()
 
 #default parameter values
 DATASET = 'cifar10'
+NETG_CIFAR10 = './samples/cifar10/netG_epoch_24.pth'
+NETD_CIFAR10 = './samples/cifar10/netD_epoch_24.pth'
+NETG_MNIST = './samples/mnist/netG_epoch_24.pth'
+NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
+
+
 NUM_EPOCHS = 25
 BATCH_SIZE = 64
 IMG_SIZE = 64
@@ -131,8 +137,23 @@ def __getDataSet(opt):
                                    transforms.Scale(opt.imageSize),
                                    transforms.ToTensor(),
                                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                               ])
-        )
+                               ]))
+        # Load pre-trained state dict
+        if opt.load_dict:
+            opt.netD = NETD_CIFAR10
+            opt.netG = NETG_CIFAR10
+    elif opt.dataset == 'mnist':
+        opt.nc = 1
+        opt.imageSize = 32
+        dataset = dset.MNIST(root=opt.dataroot, download=True, transform=transforms.Compose([
+                                   transforms.Scale(opt.imageSize),
+                                   transforms.ToTensor(),
+                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                               ]))
+        # Update opt params for mnist
+        if opt.load_dict:
+            opt.netD = NETD_MNIST
+            opt.netG = NETG_MNIST
 
     return dataset
 
@@ -262,16 +283,21 @@ def main(opt):
                   % (epoch, opt.niter, i, len(dataloader), gen_iterations,
                      errD.data[0], errG.data[0], errD_real.data[0], errD_fake.data[0]))
 
-            if gen_iterations % 500 == 0:
+            if gen_iterations % 500 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
                 real_cpu = real_cpu.mul(0.5).add(0.5)
-                vutils.save_image(real_cpu, '{0}/real_samples.png'.format(opt.experiment))
+                vutils.save_image(real_cpu, '{0}/{1}/real_samples.png'.format(opt.experiment, opt.dataset))
                 fake = netG(Variable(fixed_noise, volatile=True))
                 fake.data = fake.data.mul(0.5).add(0.5)
-                vutils.save_image(fake.data, '{0}/fake_samples_{1}.png'.format(opt.experiment, gen_iterations))
+                vutils.save_image(fake.data, '{0}/{1}/fake_samples_{2}.png'.format(opt.experiment, opt.dataset, gen_iterations))
 
         # do checkpointing
-        torch.save(netG.state_dict(), '{0}/netG_epoch_{1}.pth'.format(opt.experiment, epoch))
-        torch.save(netD.state_dict(), '{0}/netD_epoch_{1}.pth'.format(opt.experiment, epoch))
+        if opt.niter > 25:
+            if epoch % 10 == 0:
+                torch.save(netG.state_dict(), '{0}/{1}/netG_epoch_{2}.pth'.format(opt.experiment, opt.dataset, epoch))
+                torch.save(netD.state_dict(), '{0}/{1}/netD_epoch_{2}.pth'.format(opt.experiment, opt.dataset, epoch))
+        else:
+            torch.save(netG.state_dict(), '{0}/{1}/netG_epoch_{2}.pth'.format(opt.experiment, opt.dataset, epoch))
+            torch.save(netD.state_dict(), '{0}/{1}/netD_epoch_{2}.pth'.format(opt.experiment, opt.dataset, epoch))
 
 
 if __name__ == "__main__":
@@ -291,7 +317,9 @@ if __name__ == "__main__":
     parser.add_argument('--lrD', type=float, default=LR_D, help='learning rate for Critic, default=0.00005')
     parser.add_argument('--lrG', type=float, default=LR_G, help='learning rate for Generator, default=0.00005')
     parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-    parser.add_argument('--cuda', action='store_true', help='Enables cuda')
+    parser.add_argument('--visualize', action='store_true', help='Enables Visdom')
+    parser.add_argument('--cuda', action='store', default=None, type=int, help='Enables cuda')
+    parser.add_argument('--load_dict', action='store_true', help='Loads saved state dicts')
     parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
     parser.add_argument('--netG', default='', help="path to netG (to continue training)")
     parser.add_argument('--netD', default='', help="path to netD (to continue training)")
@@ -304,7 +332,26 @@ if __name__ == "__main__":
     parser.add_argument('--n_extra_layers', type=int, default=0, help='Number of extra layers on gen and disc')
     parser.add_argument('--experiment', default=None, help='Where to store samples and models')
     parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is rmsprop)')
-    args = parser.parse_args()
-    print(args)
+    opt = parser.parse_args()
 
-    main(args)
+    if opt.cuda is not None and opt.cuda >= 0:
+        if torch.cuda.is_available():
+            torch.cuda.set_device(opt.cuda)
+            opt.cuda = True
+        else:
+            opt.cuda = False
+
+    try:
+        from eval.helper import *
+        from eval.BLEU_score import *
+        from visdom import Visdom
+        import torchnet as tnt
+        from torchnet.engine import Engine
+        from torchnet.logger import VisdomPlotLogger, VisdomTextLogger, VisdomLogger
+        canVisualize = True
+    except ImportError as ie:
+        print("Could not import vizualization imports. ", file=sys.stderr)
+        canVisualize = False
+    opt.visualize = True if (opt.visualize and canVisualize) else False
+
+    main(opt)
