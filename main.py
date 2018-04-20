@@ -186,6 +186,11 @@ def weights_init(m):
 
 
 def main(opt):
+    cuda = opt.cuda; visualize = opt.visualize
+    print(f"cuda = {cuda}, visualize = {opt.visualize}")
+    if visualize:
+        netD_loss_logger = VisdomPlotLogger('line', opts={'title': 'Discriminator (NetD) Loss'})
+        netG_loss_logger = VisdomPlotLogger('line', opts={'title': 'Generator (NetG) Loss'})
 
     cudnn.benchmark = True
     opt.manualSeed = random.randint(1, 10000)  # fix seed
@@ -300,6 +305,10 @@ def main(opt):
             print('[%d/%d][%d/%d][%d] Loss_D: %f Loss_G: %f Loss_D_real: %f Loss_D_fake %f'
                   % (epoch, opt.niter, i, len(dataloader), gen_iterations,
                      errD.data[0], errG.data[0], errD_real.data[0], errD_fake.data[0]))
+
+            if visualize:
+                netD_loss_logger.log(epoch, errD.data[0])
+                netD_loss_logger.log(epoch, errG.data[0])
 
             if gen_iterations % 500 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
                 real_cpu = real_cpu.mul(0.5).add(0.5)
