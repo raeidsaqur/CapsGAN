@@ -22,6 +22,7 @@ import models.mlp as mlp
 
 isDebug = True
 USE_CUDA = torch.cuda.is_available()
+NUM_WORKERS = 4 * 1 if USE_CUDA else 2      # num_workers = 4 * NGPUs else 2
 
 #default parameter values
 DATASET = 'cifar10'
@@ -32,11 +33,11 @@ NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
 
 
 NUM_EPOCHS = 25
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 IMG_SIZE = 64
 IMG_CHANNELS = 3
-NGF = 64
-NDF = 64
+NGF = BATCH_SIZE * 2
+NDF = BATCH_SIZE * 2
 LR_D = 0.00005
 LR_G = 0.00005
 D_ITERS = 5             # Number of D iterations per G iteration
@@ -86,7 +87,7 @@ def __getGenerator(opt, ngpu, nz, ngf, ndf, nc, n_extra_layers):
         netG = mlp.MLP_G(opt.imageSize, nz, nc, ngf, ngpu)
     else:
         if isDebug: print("Using DCGAN_G for Generator")
-        netG = dcgan.DCGAN_G(opt.imageSize, nz, nc, ngf, ngpu, n_extra_layers)
+        netG = dcgan.DCGAN_G(opt.imageSize, nz, nc, ngf, ngpu, n_extra_layers, bias=False)
 
     netG.apply(weights_init)
     if opt.netG != '': # load checkpoint if needed
@@ -101,7 +102,7 @@ def __getDiscriminator(opt, ngpu, nz, ngf, ndf, nc, n_extra_layers):
         netD = mlp.MLP_D(opt.imageSize, nz, nc, ndf, ngpu)
     else:
         if isDebug: print("Using DCGAN_D for Discriminator/Critic")
-        netD = dcgan.DCGAN_D(opt.imageSize, nz, nc, ndf, ngpu, n_extra_layers)
+        netD = dcgan.DCGAN_D(opt.imageSize, nz, nc, ndf, ngpu, n_extra_layers, False)
         netD.apply(weights_init)
 
     if opt.netD != '':
@@ -194,7 +195,10 @@ def main(opt):
                                              shuffle=True,
                                              num_workers=int(opt.workers))
     nz = int(opt.nz)
-    input = torch.FloatTensor(opt.batchSize, 3, opt.imageSize, opt.imageSize)
+    nc = int(opt.nc)
+
+
+    input = torch.FloatTensor(opt.batchSize, nc, opt.imageSize, opt.imageSize)
     noise = torch.FloatTensor(opt.batchSize, nz, 1, 1)
     fixed_noise = torch.FloatTensor(opt.batchSize, nz, 1, 1).normal_(0, 1)
     one = torch.FloatTensor([1])
@@ -306,13 +310,13 @@ if __name__ == "__main__":
     parser.add_argument('--dataroot', required=True, help='path to dataset')
     parser.add_argument('--dataset', required=False, type=str, default=DATASET, help='cifar10 | imagenet | folder | lfw ')
     parser.add_argument('--debug', default=False, help='True | False')
-    parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
+    parser.add_argument('--workers', type=int, default=NUM_WORKERS, help='number of data loading workers')
     parser.add_argument('--batchSize', type=int, default=BATCH_SIZE, help='input batch size')
     parser.add_argument('--imageSize', type=int, default=IMG_SIZE, help='the height / width of the input image to network')
     parser.add_argument('--nc', type=int, default=IMG_CHANNELS, help='input image channels')
     parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
-    parser.add_argument('--ngf', type=int, default=NGF)
-    parser.add_argument('--ndf', type=int, default=NDF)
+    parser.add_argument('--ngf', type=int, default=NGF, help='number of generator features')
+    parser.add_argument('--ndf', type=int, default=NDF, help='number of discriminator features')
     parser.add_argument('--niter', type=int, default=NUM_EPOCHS, help='number of epochs to train for')
     parser.add_argument('--lrD', type=float, default=LR_D, help='learning rate for Critic, default=0.00005')
     parser.add_argument('--lrG', type=float, default=LR_G, help='learning rate for Generator, default=0.00005')

@@ -22,6 +22,19 @@ Coalesces Wassertein Distance algorithm based generative adversarial networks wi
 * MNIST
 * CIFAR-10
 
+__Running MNIST__
+
+Pass in the gpu device number for e.g. `0`
+```
+$ python --dataset mnist --nc 1 --imageSize 32 --dataroot ./data --cuda {GPU_DEVICE_NUMBER}  --workers 4
+```
+__Running CIFAR10__
+
+Pass in the gpu device number for e.g. `0`
+```bash
+$ python3 main.py --nc 3 --dataset cifar10 --dataroot ./data --cuda {GPU_DEVICE_NUMBER} --workers 4 --niter [NUM_EPOCHS] 
+```
+
 ## Usage
 
 Utilizes FAIR's visdom as visulization tool. If you'd like to visualize the test and train results, run with `visualize` args. 
@@ -31,11 +44,6 @@ $ sudo python3 -m visdom.server &
 $ python3 main.py --visualize --cuda
 ```
 
-Else, simply run:
-
-```bash
-$ python3 main.py --dataset cifar10 --dataroot ./data --cuda --niter [NUM_EPOCHS] --
-```
 
 To run with MLP as G or D, run:
 ```bash
@@ -61,6 +69,11 @@ Run with `--visualize` parameter
 $ python main.py --cude {GPU_DEVICE_NUMBER} --visualize
 ```
 
+##Architecture
+
+Using DCGAN (and variants - BN, no-BN) as baseline against the CapsNet architecture. 
+
+![DCGAN](img/DCGAN_architecture.png)
 
 ## Contact
 Please send an email to raeidsaqur[at]cs[dot]toronto[dot]edu for questions, PRs etc.
