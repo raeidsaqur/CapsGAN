@@ -22,6 +22,13 @@ Coalesces Wassertein Distance algorithm based generative adversarial networks wi
 * MNIST
 * CIFAR-10
 
+__Running MNIST__
+
+Pass in the gpu device number for e.g. `0`
+```
+$ python --dataset mnist --nc 1 --imageSize 32 --dataroot ./data --cuda {GPU_DEVICE_NUMBER}  --workers 4
+```
+
 ## Usage
 
 Utilizes FAIR's visdom as visulization tool. If you'd like to visualize the test and train results, run with `visualize` args. 
