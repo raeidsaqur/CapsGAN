@@ -5,6 +5,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.parallel
+import torchvision.transforms as transforms
 
 
 class DCGAN_D(nn.Module):
@@ -59,10 +60,12 @@ class DCGAN_D(nn.Module):
 
 
 class DCGAN_G(nn.Module):
-    def __init__(self, isize, nz, nc, ngf, ngpu, n_extra_layers=0, bias=True):
+    def __init__(self, isize, nz, nc, ngf, ngpu, n_extra_layers=0, bias=True, opt=None):
         super(DCGAN_G, self).__init__()
         self.ngpu = ngpu
         self.bias = bias
+        self.opt = opt
+        # isize = 32
         assert isize % 16 == 0, "isize has to be a multiple of 16"
 
         cngf, tisize = ngf // 2, 4
@@ -110,6 +113,13 @@ class DCGAN_G(nn.Module):
             output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
         else:
             output = self.main(input)
+
+        if self.opt.caps_D and self.opt.dataset == 'mnist':
+            # Need to resize output to allow feeding to Caps_D
+            # output.size = (128, 1, 32, 32) need output.size = (128, 1, 28, 28)
+            output = output[:, :, 2: 30, 2: 30]
+            print("\tCropping Gz to 28 by 28 for mnist dataset")
+
         return output
         ###############################################################################
 

@@ -184,7 +184,7 @@ def main(opt):
     capsule_loss = CapsuleLoss()
 
     def get_iterator(mode):
-        dataset = MNIST(root='./data', download=True, train=mode)
+        dataset = MNIST(root='../data', download=True, train=mode)
         data = getattr(dataset, 'train_data' if mode else 'test_data')
         labels = getattr(dataset, 'train_labels' if mode else 'test_labels')
         tensor_dataset = tnt.dataset.TensorDataset([data, labels])

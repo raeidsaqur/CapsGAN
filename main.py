@@ -16,9 +16,11 @@ import torchvision.utils as vutils
 from torch.autograd import Variable
 from tqdm import tqdm
 
-import utils
+from utils import *
+from dataloader import *
 import models.dcgan as dcgan
 import models.mlp as mlp
+import models.capsgan as capsgan
 
 isDebug = True
 USE_CUDA = torch.cuda.is_available()
@@ -26,13 +28,17 @@ NUM_WORKERS = 4 * 1 if USE_CUDA else 2      # num_workers = 4 * NGPUs else 2
 
 #default parameter values
 DATASET = 'cifar10'
-NETG_CIFAR10 = './samples/cifar10/netG_epoch_24.pth'
-NETD_CIFAR10 = './samples/cifar10/netD_epoch_24.pth'
-NETG_MNIST = './samples/mnist/netG_epoch_24.pth'
-NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
+# NETG_CIFAR10 = './samples/cifar10/netG_epoch_24.pth'
+# NETD_CIFAR10 = './samples/cifar10/netD_epoch_24.pth'
+# NETG_MNIST = './samples/mnist/netG_epoch_24.pth'
+# NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
 
 
-NUM_EPOCHS = 25
+
+NUM_EPOCHS = 25 if not isDebug else 10
+D_ITERS = 5 if not isDebug else 5            # Number of D iterations per G iteration
+MAX_ITERS_PER_EPOCH = 100 if not isDebug else 100
+
 BATCH_SIZE = 128
 IMG_SIZE = 64
 IMG_CHANNELS = 3
@@ -40,7 +46,6 @@ NGF = BATCH_SIZE * 2
 NDF = BATCH_SIZE * 2
 LR_D = 0.00005
 LR_G = 0.00005
-D_ITERS = 5             # Number of D iterations per G iteration
 
 
 def getOptimizers(opt, netG, netD):
@@ -48,7 +53,7 @@ def getOptimizers(opt, netG, netD):
     :param opt: Options
     :return: optimizerG, optimizerD (default RMSProp or ADAM)
     '''
-    if opt.adam:
+    if opt.adam or opt.caps_D:
         if isDebug: print("Using ADAM Optimizer")
         optimizerD = optim.Adam(netD.parameters(), lr=opt.lrD, betas=(opt.beta1, 0.999))
         optimizerG = optim.Adam(netG.parameters(), lr=opt.lrG, betas=(opt.beta1, 0.999))
@@ -85,6 +90,8 @@ def __getGenerator(opt, ngpu, nz, ngf, ndf, nc, n_extra_layers):
     elif opt.mlp_G:
         if isDebug: print("Using MLP_G for Generator")
         netG = mlp.MLP_G(opt.imageSize, nz, nc, ngf, ngpu)
+    elif opt.caps_D:
+        netG = dcgan.DCGAN_G(32, nz, nc, ngf, ngpu, n_extra_layers, bias=False, opt=opt)
     else:
         if isDebug: print("Using DCGAN_G for Generator")
         netG = dcgan.DCGAN_G(opt.imageSize, nz, nc, ngf, ngpu, n_extra_layers, bias=False)
@@ -100,6 +107,9 @@ def __getDiscriminator(opt, ngpu, nz, ngf, ndf, nc, n_extra_layers):
     if opt.mlp_D:
         if isDebug: print("Using MLP_D for Discriminator/Critic")
         netD = mlp.MLP_D(opt.imageSize, nz, nc, ndf, ngpu)
+    elif opt.caps_D:
+        if isDebug: print("Using CapsNet for Discriminator/Critic")
+        netD =capsgan.CapsNet(opt, num_classes=1)
     else:
         if isDebug: print("Using DCGAN_D for Discriminator/Critic")
         netD = dcgan.DCGAN_D(opt.imageSize, nz, nc, ndf, ngpu, n_extra_layers, False)
@@ -110,67 +120,6 @@ def __getDiscriminator(opt, ngpu, nz, ngf, ndf, nc, n_extra_layers):
     print("netD:\n {0}".format(netD))
 
     return netD
-
-def __getDataSet(opt):
-    if isDebug: print(f"Getting dataset: {opt.dataset} ... ")
-
-    dataset = None
-    if opt.dataset in ['imagenet', 'folder', 'lfw']:
-        # folder dataset
-        traindir = os.path.join(opt.dataroot, f"{opt.dataroot}/train")
-        valdir = os.path.join(opt.dataroot, f"{opt.dataroot}/val")
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
-
-        train_dataset = dset.ImageFolder(
-            traindir,
-            transforms.Compose([
-                transforms.RandomResizedCrop(opt.imageSize),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize,
-            ]))
-
-        dataset = dset.ImageFolder(root=opt.dataroot,
-                                   transform=transforms.Compose([
-                                       transforms.Scale(opt.imageSize),
-                                       transforms.CenterCrop(opt.imageSize),
-                                       transforms.ToTensor(),
-                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                                   ]))
-    elif opt.dataset == 'lsun':
-        dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],
-                            transform=transforms.Compose([
-                                transforms.Scale(opt.imageSize),
-                                transforms.CenterCrop(opt.imageSize),
-                                transforms.ToTensor(),
-                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                            ]))
-    elif opt.dataset == 'cifar10':
-        dataset = dset.CIFAR10(root=opt.dataroot, download=True,
-                               transform=transforms.Compose([
-                                   transforms.Scale(opt.imageSize),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                               ]))
-        # Load pre-trained state dict
-        if opt.load_dict:
-            opt.netD = NETD_CIFAR10
-            opt.netG = NETG_CIFAR10
-    elif opt.dataset == 'mnist':
-        opt.nc = 1
-        opt.imageSize = 32
-        dataset = dset.MNIST(root=opt.dataroot, download=True, transform=transforms.Compose([
-                                   transforms.Scale(opt.imageSize),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                               ]))
-        # Update opt params for mnist
-        if opt.load_dict:
-            opt.netD = NETD_MNIST
-            opt.netG = NETG_MNIST
-
-    return dataset
 
 
 def weights_init(m):
@@ -204,18 +153,26 @@ def main(opt):
     os.system('mkdir {0}'.format(opt.experiment))
 
     if USE_CUDA and not opt.cuda:
-        utils.eprint("WARNING: CUDA device available, please run with CUDA")
+        eprint("WARNING: CUDA device available, please run with CUDA")
 
-    dataset = __getDataSet(opt)
+    dataset = getDataSet(opt)
     assert dataset
-
     dataloader = torch.utils.data.DataLoader(dataset,
                                              batch_size=opt.batchSize,
                                              shuffle=True,
                                              num_workers=int(opt.workers))
+
+    if opt.dataset == 'mnist':
+        train_dataset = dataset.train_dataset
+        test_dataset = dataset.test_dataset
+        dataset = dataset.full_dataset
+        dataloader = torch.utils.data.DataLoader(train_dataset,
+                                                 batch_size=opt.batchSize,
+                                                 shuffle=True,
+                                                 num_workers=int(opt.workers))
+    print(f"len(dataloader) = {len(dataloader)}")
     nz = int(opt.nz)
     nc = int(opt.nc)
-
 
     input = torch.FloatTensor(opt.batchSize, nc, opt.imageSize, opt.imageSize)
     noise = torch.FloatTensor(opt.batchSize, nz, 1, 1)
@@ -237,25 +194,30 @@ def main(opt):
     optimizerG, optimizerD = getOptimizers(opt, netG, netD)
 
     gen_iterations = 0
+    all_data_size = len(dataloader)
+    print(f"all_data_size i.e. len(dataloader) = {len(dataloader)}")
     for epoch in tqdm(range(opt.niter)):
         data_iter = iter(dataloader)
         i = 0
-        while i < len(dataloader):
+        # while i < len(dataloader):
+        while i < MAX_ITERS_PER_EPOCH:
             ############################
-            # (1) Update D network
+            # (1) Train D network (netD)
             ###########################
             for p in netD.parameters():  # reset requires_grad
                 p.requires_grad = True  # they are set to False below in netG update
 
             # train the discriminator Diters times
-            if gen_iterations < 25 or gen_iterations % 500 == 0:
-                Diters = 100
-            else:
-                Diters = opt.Diters
+            # if gen_iterations < 25 or gen_iterations % 500 == 0:
+            #     Diters = 100
+            # else:
+            #     Diters = opt.Diters
+            Diters = opt.Diters
+            print(f"Starting Training Discriminator of {Diters} iterations ... ")
             j = 0
-            while j < Diters and i < len(dataloader):
+            # while j < Diters and i < len(dataloader):
+            while j < Diters and i < MAX_ITERS_PER_EPOCH:
                 j += 1
-
                 # clamp parameters to a cube
                 for p in netD.parameters():
                     p.data.clamp_(opt.clamp_lower, opt.clamp_upper)
@@ -263,57 +225,73 @@ def main(opt):
                 data = data_iter.next()
                 i += 1
 
-                # train with real
-                real_cpu, _ = data
+                print("-" * 5 + "Train with real " + "-" * 5)
                 netD.zero_grad()
+                real_cpu, _ = data
                 batch_size = real_cpu.size(0)
-
+                y_real = Variable(torch.ones(batch_size))
+                y_fake = Variable(torch.zeros(batch_size))
                 if opt.cuda:
                     real_cpu = real_cpu.cuda()
+                    # real_data = real_data.cuda()
+                    y_real = y_real.cuda()
+                    y_fake = y_fake.cuda()
+
                 input.resize_as_(real_cpu).copy_(real_cpu)
-                inputv = Variable(input)
+                real_data = Variable(input)  # x_
 
-                errD_real = netD(inputv)
-                errD_real.backward(one)
+                optimizerD.zero_grad()                          # clear accum. grads from prev batch
+                V, reconstructions, masked = netD(real_data)
+                netD_real_loss = netD.loss(data=real_data, x=V, target=y_real, reconstructions=reconstructions)
+                print(f"\n\tepoch_{epoch}_batch_{j}_D_real_loss = {netD_real_loss}\n")
+                z = torch.randn((batch_size, nz)).view(-1, nz, 1, 1)    # e.g. 128, 100, 1, 1
+                z = Variable(z.cuda()) if opt.cuda else Variable(z)
 
-                # train with fake
-                noise.resize_(opt.batchSize, nz, 1, 1).normal_(0, 1)
-                noisev = Variable(noise, volatile=True)  # totally freeze netG
-                fake = Variable(netG(noisev).data)
-                inputv = fake
-                errD_fake = netD(inputv)
-                errD_fake.backward(mone)
-                errD = errD_real - errD_fake
+                print("-" * 5 + "Train with fake " + "-" * 5)
+                Gz = netG(z)
+                Gz = Variable(Gz.data, volatile=True)
+                #Gz = Variable(netG(z).data)
+                # Fixed: here Gz (output of G is 128, 1, 32, 32) -> need (128, 1, 28, 28) for feeding to caps_D
+
+                Vz, reconstructions_z, masked_z = netD(Gz)
+                netD_fake_loss = netD.loss(data=Gz, x=Vz, target=y_fake, reconstructions=reconstructions_z)
+                print(f"\tepoch_{epoch}_batch_{j}_D_fake_loss = {netD_fake_loss}")
+
+                netD_train_loss = netD_real_loss + netD_fake_loss
+                print(f"\tepoch_{epoch}_batch_{j}_D_train_loss = {netD_train_loss}")
+                netD_train_loss.backward()
                 optimizerD.step()
 
             ############################
             # (2) Update G network
             ###########################
-            for p in netD.parameters():
-                p.requires_grad = False  # to avoid computation
-            netG.zero_grad()
+            print(f"Starting Training Generator for {MAX_ITERS_PER_EPOCH-j} iterations ... ")
+
+            netG.zero_grad(), optimizerG.zero_grad()
+            netD.eval()
             # in case our last batch was the tail batch of the dataloader,
             # make sure we feed a full batch of noise
-            noise.resize_(opt.batchSize, nz, 1, 1).normal_(0, 1)
-            noisev = Variable(noise)
-            fake = netG(noisev)
-            errG = netD(fake)
-            errG.backward(one)
+            z = torch.randn((opt.batchSize, nz)).view(-1, nz, 1, 1)
+            z = Variable(z.cuda()) if opt.cuda else Variable(z)
+            Gz = netG(z)
+            Gz = Variable(Gz.data, volatile=True)
+            Vz, reconstructions_z, masked_z = netD(Gz)
+
+            netG_train_loss = netD.loss(data=Gz, x=Vz, target=y_real, reconstructions=reconstructions_z)
+            netG_train_loss.backward()
             optimizerG.step()
+
             gen_iterations += 1
-
-            print('[%d/%d][%d/%d][%d] Loss_D: %f Loss_G: %f Loss_D_real: %f Loss_D_fake %f'
-                  % (epoch, opt.niter, i, len(dataloader), gen_iterations,
-                     errD.data[0], errG.data[0], errD_real.data[0], errD_fake.data[0]))
-
+            print("\tgen_iterations: %d" % gen_iterations)
+            print(f"\tepoch_{epoch}_batch_{gen_iterations}_G_train_loss = {netG_train_loss}")
             if visualize:
-                netD_loss_logger.log(epoch, errD.data[0])
-                netD_loss_logger.log(epoch, errG.data[0])
+                netD_loss_logger.log(epoch, netD_train_loss)
+                netG_loss_logger.log(epoch, netG_train_loss)
 
-            if gen_iterations % 500 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
-                real_cpu = real_cpu.mul(0.5).add(0.5)
+            if gen_iterations % 10 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
+                real_cpu = real_cpu.mul(0.5).add(0.5)       #de-normalizing mnist to get real sample x_real = mu + sigma.z
                 vutils.save_image(real_cpu, '{0}/{1}/real_samples.png'.format(opt.experiment, opt.dataset))
-                fake = netG(Variable(fixed_noise, volatile=True))
+                fake = netG(Variable(fixed_noise, volatile=True))   # Get a sample from random data from the generator
                 fake.data = fake.data.mul(0.5).add(0.5)
                 vutils.save_image(fake.data, '{0}/{1}/fake_samples_{2}.png'.format(opt.experiment, opt.dataset, gen_iterations))
 
@@ -356,6 +334,8 @@ if __name__ == "__main__":
     parser.add_argument('--noBN', action='store_true', help='use batchnorm or not (only for DCGAN)')
     parser.add_argument('--mlp_G', action='store_true', help='use MLP for G')
     parser.add_argument('--mlp_D', action='store_true', help='use MLP for D')
+    parser.add_argument('--caps_G', action='store_true', help='use CapsNet for G')
+    parser.add_argument('--caps_D', action='store_true', help='use CapsNet for D')
     parser.add_argument('--n_extra_layers', type=int, default=0, help='Number of extra layers on gen and disc')
     parser.add_argument('--experiment', default=None, help='Where to store samples and models')
     parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is rmsprop)')
@@ -365,6 +345,7 @@ if __name__ == "__main__":
         if torch.cuda.is_available():
             torch.cuda.set_device(opt.cuda)
             opt.cuda = True
+            torch.cuda.empty_cache()
         else:
             opt.cuda = False
 
