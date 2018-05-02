@@ -114,11 +114,12 @@ class DCGAN_G(nn.Module):
         else:
             output = self.main(input)
 
-        if self.opt.caps_D and self.opt.dataset == 'mnist':
-            # Need to resize output to allow feeding to Caps_D
-            # output.size = (128, 1, 32, 32) need output.size = (128, 1, 28, 28)
-            output = output[:, :, 2: 30, 2: 30]
-            print("\tCropping Gz to 28 by 28 for mnist dataset")
+        ## center crop output to (28, 28)
+        # if self.opt.caps_D and self.opt.dataset == 'mnist':
+        #     # Need to resize output to allow feeding to Caps_D
+        #     # output.size = (128, 1, 32, 32) need output.size = (128, 1, 28, 28)
+        #     output = output[:, :, 2: 30, 2: 30]
+        #     print("\tCropping Gz to 28 by 28 for mnist dataset")
 
         return output
         ###############################################################################

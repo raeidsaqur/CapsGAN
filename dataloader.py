@@ -26,7 +26,6 @@ NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
 
 class Mnist:
     def __init__(self, opt):
-
         dataset_transform = transforms.Compose([
             transforms.Resize(opt.imageSize),
             transforms.ToTensor(),

@@ -19,13 +19,13 @@ USE_CUDA = torch.cuda.is_available()
 BATCH_SIZE = 128
 
 class ConvLayer(nn.Module):
-    def __init__(self, in_channels=1, out_channels=256, kernel_size=9):
+    def __init__(self, in_channels=1, out_channels=256, kernel_size=9, stride=1):
         super(ConvLayer, self).__init__()
 
         self.conv = nn.Conv2d(in_channels=in_channels,
                               out_channels=out_channels,
                               kernel_size=kernel_size,
-                              stride=1
+                              stride=stride
                               )
 
     def forward(self, x):
@@ -33,18 +33,30 @@ class ConvLayer(nn.Module):
 
 
 class PrimaryCaps(nn.Module):
-    def __init__(self, num_capsules=8, in_channels=256, out_channels=32, kernel_size=9, opt=None):
+    def __init__(self, num_capsules=8, in_channels=256, out_channels=32, kernel_size=9,
+                 stride=2, padding=0, SN_bool=False, opt=None):
         super(PrimaryCaps, self).__init__()
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
         # Holds 8 PrimaryCaps Conv2d modules
         self.capsules = nn.ModuleList([
-            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=2, padding=0)
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding)
             for _ in range(num_capsules)])
 
     def forward(self, x):
-        if isDebug: print(f"PrimaryCaps.forward(x): x.size = {x.size(0)} by {x.size(1)}")
+        if isDebug: print(f"PrimaryCaps.forward(x): x.size = {x.size()}")
+
+        batch_size = x.size(0)
+        input_size = x.shape[2]
+        output_size = int((((input_size - self.kernel_size) + 2 * (self.padding)) / self.stride) + 1)
+
         u = [capsule(x) for capsule in self.capsules]
         u = torch.stack(u, dim=1)
-        u = u.view(x.size(0), 32 * 6 * 6, -1)
+
+        # u = u.view(batch_size, 32 * 6 * 6, -1)
+        u = u.view(batch_size, 32 * output_size * output_size, -1)
+
         return self.squash(u)
 
     def squash(self, input_tensor):
@@ -54,7 +66,8 @@ class PrimaryCaps(nn.Module):
 
 
 class DigitCaps(nn.Module):
-    def __init__(self, num_capsules=10, num_routes=32 * 6 * 6, in_channels=8, out_channels=16, opt=None):
+    # def __init__(self, num_capsules=10, num_routes=32 * 6 * 6, in_channels=8, out_channels=16, opt=None):
+    def __init__(self, num_capsules=10, num_routes=32 * 8 * 8, in_channels=8, out_channels=16, opt=None):
         super(DigitCaps, self).__init__()
 
         self.in_channels = in_channels
@@ -101,15 +114,18 @@ class DigitCaps(nn.Module):
 class Decoder(nn.Module):
     def __init__(self, opt=None, num_classes=10):
         super(Decoder, self).__init__()
+        self.opt = opt
         self.num_classes = num_classes
-        final_fc_layer = nn.Linear(1024, (opt.imageSize * opt.imageSize)) if opt is not None else nn.Linear(1024, 784)
+
+        isize = opt.imageSize if self.opt.imageSize else 32
+
         self.reconstruction_layers = nn.Sequential(
             nn.Linear((16 * num_classes), 512),
             nn.ReLU(inplace=True),
-            nn.Linear(512, 1024),
+            # nn.Linear(512, 1024),
+            nn.Linear(512, 1636),
             nn.ReLU(inplace=True),
-            # nn.Linear(1024, 784),
-            final_fc_layer,
+            nn.Linear(1636, (isize * isize)),
             nn.Sigmoid()
         )
 
@@ -119,12 +135,11 @@ class Decoder(nn.Module):
         :param data: data (for e.g. 28 by 28 mnist)
         :return: reconstructions, masked
         '''
-        if isDebug: print(f"Decoder.forward(x): x.size = {x.size(0)} by {x.size(1)}")
+        if isDebug: print(f"Decoder.forward(x): x.size = {x.size()}")
         classes = torch.sqrt((x ** 2).sum(2))
+        classes = F.softmax(classes)
+        # classes = F.softmax(classes, dim=-1)
 
-        # UserWarning: Implicit dimension choice for softmax has been deprecated. Change the call to include dim=X as an argument.
-        # classes = F.softmax(classes)
-        classes = F.softmax(classes, dim=-1)
         _, max_length_indices = classes.max(dim=1)
         # masked = Variable(torch.sparse.torch.eye(10))
         masked = Variable(torch.sparse.torch.eye(self.num_classes))
@@ -133,7 +148,8 @@ class Decoder(nn.Module):
         masked = masked.index_select(dim=0, index=Variable(max_length_indices.squeeze(1).data))
 
         reconstructions = self.reconstruction_layers((x * masked[:, :, None, None]).view(x.size(0), -1))
-        reconstructions = reconstructions.view(-1, 1, 28, 28)
+        isize = self.opt.imageSize if self.opt.imageSize else 32
+        reconstructions = reconstructions.view(-1, 1, isize, isize)
 
         return reconstructions, masked
 
@@ -171,7 +187,7 @@ class CapsNet(nn.Module):
 
         return margin_loss + reconstruction_loss
 
-    def margin_loss(self, x, labels, size_average=True):
+    def margin_loss(self, x, labels, size_average=True, isBinaryLabel=True):
         batch_size = x.size(0)
 
         v_c = torch.sqrt((x ** 2).sum(dim=2, keepdim=True))
@@ -179,12 +195,15 @@ class CapsNet(nn.Module):
         left = ((F.relu(0.9 - v_c)) ** 2).view(batch_size, -1)
         right = ((F.relu(v_c - 0.1)) ** 2).view(batch_size, -1)
 
+        if isBinaryLabel:
+            labels = labels.data[0]
+            print(f"labels = {labels}")
         loss = labels * left + 0.5 * (1.0 - labels) * right
         loss = loss.sum(dim=1).mean()
 
         return loss
 
-    def reconstruction_loss(self, data, reconstructions):
+    def reconstruction_loss(self, data, reconstructions, phi=0.0005):
         if isDebug: print(f"CapsNet.reconstruction_loss(data, reconstructions): data.size = {data.size(0)} by {data.size(1)}")
         print(f"reconstructions.size() = {reconstructions.size()}")
         r = reconstructions.contiguous().view(reconstructions.size(0), -1)
@@ -192,7 +211,8 @@ class CapsNet(nn.Module):
 
         loss = self.mse_loss(r, d)
 
-        return loss * 0.0005
+        # Dampen R loss
+        return loss * phi
 
 
 if __name__ == "__main__":
