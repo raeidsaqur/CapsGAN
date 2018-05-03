@@ -33,16 +33,18 @@ DATASET = 'cifar10'
 # NETG_MNIST = './samples/mnist/netG_epoch_24.pth'
 # NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
 
+NETG = "./samples/smallnorb/netG_epoch_24.pth"
+NETD = './samples/smallnorb/netD_epoch_24.pth'
 
-NUM_EPOCHS = 25
+NUM_EPOCHS = 50
 BATCH_SIZE = 128
 IMG_SIZE = 64
 IMG_CHANNELS = 3
 NGF = BATCH_SIZE * 2
 NDF = BATCH_SIZE * 2
-LR_D = 0.00005
-LR_G = 0.00005
-D_ITERS = 5             # Number of D iterations per G iteration
+LR_D = 0.00005 if not isDebug else 0.0005
+LR_G = 0.00005 if not isDebug else 0.0005
+D_ITERS = 5              # Number of D iterations per G iteration
 
 
 
@@ -159,6 +161,9 @@ def main(opt):
         test_dataset = dataset.test_dataset
         dataset = dataset.full_dataset
 
+    # if opt.dataset == 'smallnorb':
+
+
     dataloader = torch.utils.data.DataLoader(dataset,
                                              batch_size=opt.batchSize,
                                              shuffle=True,
@@ -259,16 +264,16 @@ def main(opt):
                 netD_loss_logger.log(epoch, errD.data[0])
                 netD_loss_logger.log(epoch, errG.data[0])
 
-            if gen_iterations % 500 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
+            if gen_iterations % 50 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
                 real_cpu = real_cpu.mul(0.5).add(0.5)
-                vutils.save_image(real_cpu, '{0}/{1}/real_samples.png'.format(opt.experiment, opt.dataset))
+                vutils.save_image(real_cpu, '{0}/{1}/real_samples_{2}.png'.format(opt.experiment, opt.dataset, gen_iterations))
                 fake = netG(Variable(fixed_noise, volatile=True))
                 fake.data = fake.data.mul(0.5).add(0.5)
                 vutils.save_image(fake.data, '{0}/{1}/fake_samples_{2}.png'.format(opt.experiment, opt.dataset, gen_iterations))
 
         # do checkpointing
         if opt.niter > 25:
-            if epoch % 10 == 0:
+            if epoch % 5 == 0:
                 torch.save(netG.state_dict(), '{0}/{1}/netG_epoch_{2}.pth'.format(opt.experiment, opt.dataset, epoch))
                 torch.save(netD.state_dict(), '{0}/{1}/netD_epoch_{2}.pth'.format(opt.experiment, opt.dataset, epoch))
         else:

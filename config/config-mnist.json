@@ -1,0 +1,5 @@
+{
+  "dataset": "mnist",
+  "nc": 1,
+  "imgSize" : 32
+}
