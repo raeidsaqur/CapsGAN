@@ -34,7 +34,7 @@ NETG_CIFAR10 = './samples/cifar10/netG_epoch_24.pth'
 NETD_CIFAR10 = './samples/cifar10/netD_epoch_24.pth'
 NETG_MNIST = './samples/mnist/netG_epoch_24.pth'
 NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
-# --netG ./samples/smallnorb/netG_epoch_24.pth --netD ./samples/smallnorb/netD_epoch_24.pth
+# --netG ./samples/smallnorb/netG_epoch_25.pth --netD ./samples/smallnorb/netD_epoch_25.pth
 
 class SmallNORBSample:
 

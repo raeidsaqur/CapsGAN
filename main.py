@@ -265,11 +265,13 @@ def main(opt):
                 netD_loss_logger.log(epoch, errG.data[0])
 
             if gen_iterations % 50 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
-                real_cpu = real_cpu.mul(0.5).add(0.5)
-                vutils.save_image(real_cpu, '{0}/{1}/real_samples_{2}.png'.format(opt.experiment, opt.dataset, gen_iterations))
+
+                fiter = f"{gen_iterations + 11250}"
+                real_cpu = real_cpu.mul(0.dafdasfda
+                vutils.save_image(real_cpu, '{0}/{1}/real_samples_{2}.png'.format(opt.experiment, opt.dataset, fiter))
                 fake = netG(Variable(fixed_noise, volatile=True))
                 fake.data = fake.data.mul(0.5).add(0.5)
-                vutils.save_image(fake.data, '{0}/{1}/fake_samples_{2}.png'.format(opt.experiment, opt.dataset, gen_iterations))
+                vutils.save_image(fake.data, '{0}/{1}/fake_samples_{2}.png'.format(opt.experiment, opt.dataset, fiter))
 
         # do checkpointing
         if opt.niter > 25:
