@@ -1,4 +1,7 @@
 # CapsGAN 
+
+*_Work In Progress: Some major code refactoring is underway and this branch is unstable a.t.m_ *.
+
 Unsupervised representation learning with CapsNet based Generative Adversarial Networks
 
 
@@ -21,6 +24,9 @@ Coalesces Wassertein Distance algorithm based generative adversarial networks wi
 
 * MNIST
 * CIFAR-10
+* SmallNORB
+
+### MNIST ###
 
 __Running MNIST__
 
@@ -28,6 +34,33 @@ Pass in the gpu device number for e.g. `0`
 ```
 $ python --dataset mnist --nc 1 --imageSize 32 --dataroot ./data --cuda {GPU_DEVICE_NUMBER}  --workers 4
 ```
+
+### SmallNORB ###
+__Running SmallNORB__
+
+[SmallNORB](https://cs.nyu.edu/~ylclab/data/norb-v1.0-small/) is an ideal dataset for testing the efficacy of Capsule networks over traditional CNN based GANs.
+
+
+![SmallNORB_Animals](img/smallnorb/real_samples_animals.png)
+![SmallNORB_Humans](img/smallnorb/real_samples_humans.png)
+![SmallNORB_Planes](img/smallnorb/real_samples_planes.png)
+![SmallNORB_Trucks](img/smallnorb/real_samples_trucks.png)
+![SmallNORB_Cars](img/smallnorb/real_samples_cars.png)
+
+Pass in the gpu device number for e.g. `0`
+```
+$ python --dataset smallnorb --nc 1 --imageSize 64 --dataroot ./data/smallnorb/ --cuda {GPU_DEVICE_NUMBER}  --workers 4
+```
+
+__SmallNORB Results__
+
+Reconstructed smallNORB cars and planes: 
+
+![Reconstructed SmallNORB Cars](img/smallnorb/caps_gen_car.png)
+![Reconstructed SmallNORB Planes](img/smallnorb/caps_gen_plane.png)
+
+
+### CIFAR10 ###
 __Running CIFAR10__
 
 Pass in the gpu device number for e.g. `0`
