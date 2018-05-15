@@ -267,7 +267,7 @@ def main(opt):
             if gen_iterations % 50 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
 
                 fiter = f"{gen_iterations + 11250}"
-                real_cpu = real_cpu.mul(0.dafdasfda
+                real_cpu = real_cpu.mul(0.5).add(0.5)  # de-normalizing mnist to get real sample x_real = mu + sigma.z
                 vutils.save_image(real_cpu, '{0}/{1}/real_samples_{2}.png'.format(opt.experiment, opt.dataset, fiter))
                 fake = netG(Variable(fixed_noise, volatile=True))
                 fake.data = fake.data.mul(0.5).add(0.5)
