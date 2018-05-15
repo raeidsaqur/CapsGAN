@@ -36,6 +36,12 @@ $ python --dataset mnist --nc 1 --imageSize 32 --dataroot ./data --cuda {GPU_DEV
 ```
 
 ### SmallNORB ###
+__Architecture__
+
+High level architecture:
+
+![SmallNORB_Architecture](img/smallnorb/em-capsule-architecture.png)
+
 __Running SmallNORB__
 
 [SmallNORB](https://cs.nyu.edu/~ylclab/data/norb-v1.0-small/) is an ideal dataset for testing the efficacy of Capsule networks over traditional CNN based GANs.
