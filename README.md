@@ -1,4 +1,7 @@
 # CapsGAN 
+
+*_Work In Progress: Some major code refactoring is underway and this branch is unstable a.t.m_ *.
+
 Unsupervised representation learning with CapsNet based Generative Adversarial Networks
 
 
