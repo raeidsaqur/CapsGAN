@@ -181,8 +181,8 @@ def main(opt):
     netG, netD = getNetworks(opt)
     if opt.cuda:
         if isDebug: print("Using CUDA")
-        netD.cuda()
-        netG.cuda()
+        netD = netD.cuda()
+        netG = netG.cuda()
         input = input.cuda()
         one, mone = one.cuda(), mone.cuda()
         noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
