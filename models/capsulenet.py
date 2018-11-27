@@ -26,25 +26,20 @@ try:
 except ImportError as ie:
     print("Couldn't import utils", file=sys.stderr)
 
-
 isDebug = True
 USE_CUDA = torch.cuda.is_available()
-
 BATCH_SIZE = 100
 NUM_CLASSES = 10
 NUM_EPOCHS = 500 if not isDebug else 5
 NUM_ROUTING_ITERATIONS = 3
-
 
 def softmax(input, dim=1):
     transposed_input = input.transpose(dim, len(input.size()) - 1)
     softmaxed_output = F.softmax(transposed_input.contiguous().view(-1, transposed_input.size(-1)), dim=-1)
     return softmaxed_output.view(*transposed_input.size()).transpose(dim, len(input.size()) - 1)
 
-
 def augmentation(x, max_shift=2):
     _, _, height, width = x.size()
-
     h_shift, w_shift = np.random.randint(-max_shift, max_shift + 1, size=2)
     source_height_slice = slice(max(0, h_shift), h_shift + height)
     source_width_slice = slice(max(0, w_shift), w_shift + width)
@@ -79,30 +74,23 @@ class CapsuleNet(nn.Module):
         x = F.relu(self.conv1(x), inplace=True)
         x = self.primary_capsules(x)
         x = self.digit_capsules(x).squeeze().transpose(0, 1)
-
         classes = (x ** 2).sum(dim=-1) ** 0.5
         classes = F.softmax(classes, dim=-1)
-
         if y is None:
             # In all batches, get the most active capsule.
             _, max_length_indices = classes.max(dim=1)
             y = Variable(torch.sparse.torch.eye(NUM_CLASSES)).cuda().index_select(dim=0, index=max_length_indices.data)
-
         reconstructions = self.decoder((x * y[:, :, None]).view(x.size(0), -1))
 
         return classes, reconstructions
-
 
 class CapsuleLayer(nn.Module):
     def __init__(self, num_capsules, num_route_nodes, in_channels, out_channels, kernel_size=None, stride=None,
                  num_iterations=NUM_ROUTING_ITERATIONS):
         super(CapsuleLayer, self).__init__()
-
         self.num_route_nodes = num_route_nodes
         self.num_iterations = num_iterations
-
         self.num_capsules = num_capsules
-
         if num_route_nodes != -1:
             self.route_weights = nn.Parameter(torch.randn(num_capsules, num_route_nodes, in_channels, out_channels))
         else:
@@ -143,16 +131,12 @@ class CapsuleLoss(nn.Module):
     def forward(self, images, labels, classes, reconstructions):
         left = F.relu(0.9 - classes, inplace=True) ** 2
         right = F.relu(classes - 0.1, inplace=True) ** 2
-
         margin_loss = labels * left + 0.5 * (1. - labels) * right
         margin_loss = margin_loss.sum()
-
         assert torch.numel(images) == torch.numel(reconstructions)
         images = images.view(reconstructions.size()[0], -1)
         reconstruction_loss = self.reconstruction_loss(reconstructions, images)
-
         return (margin_loss + 0.0005 * reconstruction_loss) / images.size(0)
-
 
 def main(opt):
 
@@ -193,21 +177,15 @@ def main(opt):
 
     def processor(sample):
         data, labels, training = sample
-
         data = augmentation(data.unsqueeze(1).float() / 255.0)
         labels = torch.LongTensor(labels)
-
         labels = torch.sparse.torch.eye(NUM_CLASSES).index_select(dim=0, index=labels)
-
-
         data = Variable(data).cuda()
         labels = Variable(labels).cuda()
-
         if training:
             classes, reconstructions = model(data, labels)
         else:
             classes, reconstructions = model(data)
-
         loss = capsule_loss(data, labels, classes, reconstructions)
 
         return loss, classes
@@ -235,9 +213,7 @@ def main(opt):
 
         train_loss_logger.log(state['epoch'], meter_loss.value()[0])
         train_error_logger.log(state['epoch'], meter_accuracy.value()[0])
-
         reset_meters()
-
         engine.test(processor, get_iterator(False))
         test_loss_logger.log(state['epoch'], meter_loss.value()[0])
         test_accuracy_logger.log(state['epoch'], meter_accuracy.value()[0])
@@ -249,13 +225,10 @@ def main(opt):
         torch.save(model.state_dict(), 'epochs/epoch_%d.pt' % state['epoch'])
 
         # Reconstruction visualization.
-
         test_sample = next(iter(get_iterator(False)))
-
         ground_truth = (test_sample[0].unsqueeze(1).float() / 255.0)
         _, reconstructions = model(Variable(ground_truth).cuda())
         reconstruction = reconstructions.cpu().view_as(ground_truth).data
-
         ground_truth_logger.log(
             make_grid(ground_truth, nrow=int(BATCH_SIZE ** 0.5), normalize=True, range=(0, 1)).numpy())
         reconstruction_logger.log(
@@ -272,9 +245,6 @@ def main(opt):
 
     # engine.train(processor, get_iterator(True), maxepoch=NUM_EPOCHS, optimizer=optimizer)
     engine.train(processor, get_iterator(True), maxepoch=5, optimizer=optimizer)
-
-
-
 
 if __name__ == "__main__":
 
