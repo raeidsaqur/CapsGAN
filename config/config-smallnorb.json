@@ -1,0 +1,5 @@
+{
+  "dataset": "smallnorb",
+  "nc": 1,
+  "imgSize" : 96
+}

@@ -16,9 +16,11 @@ import torchvision.utils as vutils
 from torch.autograd import Variable
 from tqdm import tqdm
 
-import utils
+from utils import *
+from dataloader import *
 import models.dcgan as dcgan
 import models.mlp as mlp
+import models.capsgan as capsgan
 
 isDebug = True
 USE_CUDA = torch.cuda.is_available()
@@ -26,21 +28,24 @@ NUM_WORKERS = 4 * 1 if USE_CUDA else 2      # num_workers = 4 * NGPUs else 2
 
 #default parameter values
 DATASET = 'cifar10'
-NETG_CIFAR10 = './samples/cifar10/netG_epoch_24.pth'
-NETD_CIFAR10 = './samples/cifar10/netD_epoch_24.pth'
-NETG_MNIST = './samples/mnist/netG_epoch_24.pth'
-NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
+# NETG_CIFAR10 = './samples/cifar10/netG_epoch_24.pth'
+# NETD_CIFAR10 = './samples/cifar10/netD_epoch_24.pth'
+# NETG_MNIST = './samples/mnist/netG_epoch_24.pth'
+# NETD_MNIST = './samples/mnist/netD_epoch_24.pth'
 
+NETG = "./samples/smallnorb/netG_epoch_24.pth"
+NETD = './samples/smallnorb/netD_epoch_24.pth'
 
-NUM_EPOCHS = 25
+NUM_EPOCHS = 50
 BATCH_SIZE = 128
 IMG_SIZE = 64
 IMG_CHANNELS = 3
 NGF = BATCH_SIZE * 2
 NDF = BATCH_SIZE * 2
-LR_D = 0.00005
-LR_G = 0.00005
-D_ITERS = 5             # Number of D iterations per G iteration
+LR_D = 0.00005 if not isDebug else 0.0005
+LR_G = 0.00005 if not isDebug else 0.0005
+D_ITERS = 5              # Number of D iterations per G iteration
+
 
 
 def getOptimizers(opt, netG, netD):
@@ -48,7 +53,7 @@ def getOptimizers(opt, netG, netD):
     :param opt: Options
     :return: optimizerG, optimizerD (default RMSProp or ADAM)
     '''
-    if opt.adam:
+    if opt.adam or opt.caps_D:
         if isDebug: print("Using ADAM Optimizer")
         optimizerD = optim.Adam(netD.parameters(), lr=opt.lrD, betas=(opt.beta1, 0.999))
         optimizerG = optim.Adam(netG.parameters(), lr=opt.lrG, betas=(opt.beta1, 0.999))
@@ -100,6 +105,9 @@ def __getDiscriminator(opt, ngpu, nz, ngf, ndf, nc, n_extra_layers):
     if opt.mlp_D:
         if isDebug: print("Using MLP_D for Discriminator/Critic")
         netD = mlp.MLP_D(opt.imageSize, nz, nc, ndf, ngpu)
+    elif opt.caps_D:
+        if isDebug: print("Using CapsNet for Discriminator/Critic")
+        netD =capsgan.CapsNet(opt=opt)
     else:
         if isDebug: print("Using DCGAN_D for Discriminator/Critic")
         netD = dcgan.DCGAN_D(opt.imageSize, nz, nc, ndf, ngpu, n_extra_layers, False)
@@ -110,67 +118,6 @@ def __getDiscriminator(opt, ngpu, nz, ngf, ndf, nc, n_extra_layers):
     print("netD:\n {0}".format(netD))
 
     return netD
-
-def __getDataSet(opt):
-    if isDebug: print(f"Getting dataset: {opt.dataset} ... ")
-
-    dataset = None
-    if opt.dataset in ['imagenet', 'folder', 'lfw']:
-        # folder dataset
-        traindir = os.path.join(opt.dataroot, f"{opt.dataroot}/train")
-        valdir = os.path.join(opt.dataroot, f"{opt.dataroot}/val")
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
-
-        train_dataset = dset.ImageFolder(
-            traindir,
-            transforms.Compose([
-                transforms.RandomResizedCrop(opt.imageSize),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize,
-            ]))
-
-        dataset = dset.ImageFolder(root=opt.dataroot,
-                                   transform=transforms.Compose([
-                                       transforms.Scale(opt.imageSize),
-                                       transforms.CenterCrop(opt.imageSize),
-                                       transforms.ToTensor(),
-                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                                   ]))
-    elif opt.dataset == 'lsun':
-        dataset = dset.LSUN(db_path=opt.dataroot, classes=['bedroom_train'],
-                            transform=transforms.Compose([
-                                transforms.Scale(opt.imageSize),
-                                transforms.CenterCrop(opt.imageSize),
-                                transforms.ToTensor(),
-                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                            ]))
-    elif opt.dataset == 'cifar10':
-        dataset = dset.CIFAR10(root=opt.dataroot, download=True,
-                               transform=transforms.Compose([
-                                   transforms.Scale(opt.imageSize),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                               ]))
-        # Load pre-trained state dict
-        if opt.load_dict:
-            opt.netD = NETD_CIFAR10
-            opt.netG = NETG_CIFAR10
-    elif opt.dataset == 'mnist':
-        opt.nc = 1
-        opt.imageSize = 32
-        dataset = dset.MNIST(root=opt.dataroot, download=True, transform=transforms.Compose([
-                                   transforms.Scale(opt.imageSize),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                               ]))
-        # Update opt params for mnist
-        if opt.load_dict:
-            opt.netD = NETD_MNIST
-            opt.netG = NETG_MNIST
-
-    return dataset
 
 
 def weights_init(m):
@@ -204,10 +151,18 @@ def main(opt):
     os.system('mkdir {0}'.format(opt.experiment))
 
     if USE_CUDA and not opt.cuda:
-        utils.eprint("WARNING: CUDA device available, please run with CUDA")
+        eprint("WARNING: CUDA device available, please run with CUDA")
 
-    dataset = __getDataSet(opt)
+    # dataset = __getDataSet(opt)
+    dataset = getDataSet(opt)
     assert dataset
+    if opt.dataset == 'mnist':
+        train_dataset = dataset.train_dataset
+        test_dataset = dataset.test_dataset
+        dataset = dataset.full_dataset
+
+    # if opt.dataset == 'smallnorb':
+
 
     dataloader = torch.utils.data.DataLoader(dataset,
                                              batch_size=opt.batchSize,
@@ -215,7 +170,6 @@ def main(opt):
                                              num_workers=int(opt.workers))
     nz = int(opt.nz)
     nc = int(opt.nc)
-
 
     input = torch.FloatTensor(opt.batchSize, nc, opt.imageSize, opt.imageSize)
     noise = torch.FloatTensor(opt.batchSize, nz, 1, 1)
@@ -227,8 +181,8 @@ def main(opt):
     netG, netD = getNetworks(opt)
     if opt.cuda:
         if isDebug: print("Using CUDA")
-        netD.cuda()
-        netG.cuda()
+        netD = netD.cuda()
+        netG = netG.cuda()
         input = input.cuda()
         one, mone = one.cuda(), mone.cuda()
         noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
@@ -310,16 +264,18 @@ def main(opt):
                 netD_loss_logger.log(epoch, errD.data[0])
                 netD_loss_logger.log(epoch, errG.data[0])
 
-            if gen_iterations % 500 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
-                real_cpu = real_cpu.mul(0.5).add(0.5)
-                vutils.save_image(real_cpu, '{0}/{1}/real_samples.png'.format(opt.experiment, opt.dataset))
+            if gen_iterations % 50 == 0 or ((gen_iterations % 100 == 0) and (opt.dataset == 'mnist')):
+
+                fiter = f"{gen_iterations + 11250}"
+                real_cpu = real_cpu.mul(0.5).add(0.5)  # de-normalizing mnist to get real sample x_real = mu + sigma.z
+                vutils.save_image(real_cpu, '{0}/{1}/real_samples_{2}.png'.format(opt.experiment, opt.dataset, fiter))
                 fake = netG(Variable(fixed_noise, volatile=True))
                 fake.data = fake.data.mul(0.5).add(0.5)
-                vutils.save_image(fake.data, '{0}/{1}/fake_samples_{2}.png'.format(opt.experiment, opt.dataset, gen_iterations))
+                vutils.save_image(fake.data, '{0}/{1}/fake_samples_{2}.png'.format(opt.experiment, opt.dataset, fiter))
 
         # do checkpointing
         if opt.niter > 25:
-            if epoch % 10 == 0:
+            if epoch % 5 == 0:
                 torch.save(netG.state_dict(), '{0}/{1}/netG_epoch_{2}.pth'.format(opt.experiment, opt.dataset, epoch))
                 torch.save(netD.state_dict(), '{0}/{1}/netD_epoch_{2}.pth'.format(opt.experiment, opt.dataset, epoch))
         else:
@@ -356,6 +312,8 @@ if __name__ == "__main__":
     parser.add_argument('--noBN', action='store_true', help='use batchnorm or not (only for DCGAN)')
     parser.add_argument('--mlp_G', action='store_true', help='use MLP for G')
     parser.add_argument('--mlp_D', action='store_true', help='use MLP for D')
+    parser.add_argument('--caps_G', action='store_true', help='use CapsNet for G')
+    parser.add_argument('--caps_D', action='store_true', help='use CapsNet for D')
     parser.add_argument('--n_extra_layers', type=int, default=0, help='Number of extra layers on gen and disc')
     parser.add_argument('--experiment', default=None, help='Where to store samples and models')
     parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is rmsprop)')
@@ -365,6 +323,7 @@ if __name__ == "__main__":
         if torch.cuda.is_available():
             torch.cuda.set_device(opt.cuda)
             opt.cuda = True
+            torch.cuda.empty_cache()
         else:
             opt.cuda = False
 
